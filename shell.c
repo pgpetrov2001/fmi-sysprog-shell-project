@@ -1,125 +1,145 @@
 #include <stdio.h>
-  1 #include <stdlib.h>
-  2 #include <fcntl.h>
-  3 #include <ctype.h>
-  4 #include <string.h>
-  5
-  6 //TODO: write getline
-  7
-  8 #define bool unsigned char
-  9 #define true 1
- 10 #define false 0
- 11
- 12 char *strcatchr(const char *str, char c) {
- 13     char buf[2];
- 14     buf[0] = c; buf[1] = 0;
- 15     return strcat(str, buf);
- 16 }
- 17
- 18 bool is_special_char(char c) {
- 19     return isspace(c) || c == '&' || c == '\'' || c == ';';
- 20 }
- 21
- 22 size_t getcnttokens(const char *line, size_t len) {
- 23     size_t cnttokens = 1;
- 24     bool inToken = false;
- 25     for (int i=0; i<len; i++) {
- 26         if (is_special_char(c))  {
- 27             inToken = false;
- 28         } else {
- 29             if (!inToken) {
- 30                 cnttokens++;
- 31                 inToken = true;
- 32             }
- 33         }
- 34     }
- 35     return cnttokens;
- 36 }
- 37
- 38 void syntax_error(const char *msg) {
- 39     char buf[1000];
- 40     sprintf(buf, "Syntax error near %s\n", msg);
- 41     write(2, buf, strlen(buf));
- 42 }
- 43
- 44 char **gettokens(const char *line, size_t len) {
- 45     int cnt = getcnttokens(line, len);
- 46     char **tokens = calloc(sizeof(char*) * (cnt + 1)); // it potentially allocates for more tokens
- 47     bool *is_control = calloc(sizeof(bool) * cnt);
- 48
- 49     bool escaping = false;
- 50     bool inSingleQuotes = false;
- 51     int currtoken = 0;
- 52
- 53     int i;
- 54     for (i=0; i<len; i++) {
- 55         if (line[i] == '\'') {
- 56             inSingleQuotes = !inSingleQuotes;
- 57         } else {
- 58             if (inSingleQuotes || escaping) {
- 59                 strcatchr(tokens[currtoken], line[i]);
- 60             } else {
- 61                 if (lines[i] == '\\') {
-                 inToken = true;
-  1             }
-  2         }
-  3     }
-  4     return cnttokens;
-  5 }
-  6
-  7 void syntax_error(const char *msg) {
-  8     char buf[1000];
-  9     sprintf(buf, "Syntax error near %s\n", msg);
- 10     write(2, buf, strlen(buf));
- 11 }
- 12
- 13 char **gettokens(const char *line, size_t len) {
- 14     int cnt = getcnttokens(line, len);
- 15     char **tokens = calloc(sizeof(char*) * (cnt + 1)); // it potentially allocates for more tokens
- 16     bool *is_control = calloc(sizeof(bool) * cnt);
- 17
- 18     bool escaping = false;
- 19     bool inSingleQuotes = false;
- 20     int currtoken = 0;
- 21
- 22     int i;
- 23     for (i=0; i<len; i++) {
- 24         if (line[i] == '\'') {
- 25             inSingleQuotes = !inSingleQuotes;
- 26         } else {
- 27             if (inSingleQuotes || escaping) {
- 28                 strcatchr(tokens[currtoken], line[i]);
- 29             } else {
- 30                 if (lines[i] == '\\') {
- 31                     escaping = true;
- 32                 } else if (line[i] == ';') {
- 33                     is_control[currtoken] = 1;
- 34                     tokens[currtoken] = malloc(2);
- 35                     strcpy(tokens[currtoken], ";");
- 36                 } else if (line[i] == '&') {
- 37                     is_control[currtoken] = 1;
- 38                     if (tokens[currtoken] && tokens[currtoken][0] == '&') {
- 39                         if (strcmp(tokens[currtoken], "&&") == 0) {
- 40                             syntax_error("unexpected character &");
- 41                             return -1;
- 42                         }
- 43                         strcpy(tokens[currtoken], "&&");
- 44                     } else {
- 45                         tokens[currtoken] = malloc(3);
- 46                         strcpy(tokens[currtoken], "&");
- 47                     }
- 48                 } else if (isspace(line[i])) {
- 49                     if (tokens[currtoken]) currtoken++;
- 50                 } else {
- 51                     if (is_control[currtoken]) currtoken++;
- 52                     strcatchr(tokens[currtoken], line[i]);
- 53                 }
- 54             }
- 55
- 56         }
- 57     }
- 58
- 59     return tokens;
- 60 }
- 61
-                                                         
+#include <stdlib.h>
+#include <fcntl.h>
+#include <ctype.h>
+#include <string.h>
+
+//TODO: write getline
+
+#define bool unsigned char
+#define true 1
+#define false 0
+
+char *strcatchr(char *str, char c) {
+    if (!str) {
+        char *buf = malloc(2);
+        buf[0] = c; buf[1] =0;
+        return buf;
+    }
+    int len = strlen(str);
+ 
+    char *newstr = malloc(len+2);
+    strcpy(newstr, str);
+    free(str);
+    newstr[len] = c;
+    newstr[len+1] = 0;
+    return newstr;
+}
+
+bool is_special_char(char c) {
+    return isspace(c) || c == '&' || c == '\'' || c == ';';
+}
+
+size_t getcnttokens(const char *line, size_t len) {
+    size_t cnttokens = 1;
+    bool inToken = false;
+    int i;
+    for (i=0; i<len; ++i) {
+        if (is_special_char(line[i]))  {
+            inToken = false;
+            if (!isspace(line[i])) ++cnttokens;
+        } else {
+            if (!inToken) {
+                ++cnttokens;
+                inToken = true;
+            }
+        }
+    }
+    return cnttokens;
+}
+
+void syntax_error(const char *msg) {
+    char buf[1000];
+    sprintf(buf, "Syntax error near %s\n", msg);
+    write(2, buf, strlen(buf));
+}
+
+char **gettokens(const char *line, size_t len, bool **is_control_out) {
+    int cnt = getcnttokens(line, len);
+    //calloc fills values with 0s
+    char **tokens = calloc(cnt + 1, sizeof(char*));
+    bool *is_control = calloc(cnt, sizeof(bool));
+
+    bool escaping = false;
+    bool inSingleQuotes = false;
+    int currtoken = 0;
+
+    int i;
+    for (i=0; i<len; i++) {
+        if (line[i] == '\'') {
+            inSingleQuotes = !inSingleQuotes;
+        } else {
+            if (inSingleQuotes || escaping) {
+                tokens[currtoken] = strcatchr(tokens[currtoken], line[i]);
+                escaping = false;
+            } else {
+                if (line[i] == '\\') {
+                    escaping = true;
+                } else if (line[i] == ';') {
+                    if (tokens[currtoken]) ++currtoken;
+                    is_control[currtoken] = 1;
+                    tokens[currtoken] = malloc(2);
+                    strcpy(tokens[currtoken], ";");
+
+} else if (line[i] == '&') {
+                    if (tokens[currtoken] && tokens[currtoken][0] == '&') {
+                        if (strcmp(tokens[currtoken], "&&") == 0) {
+                            syntax_error("unexpected character &");
+                            free(tokens);
+                            free(is_control);
+                            return NULL;
+                        }
+                        strcpy(tokens[currtoken], "&&");
+                    } else {
+                        if (tokens[currtoken]) ++currtoken;
+                        is_control[currtoken] = 1;
+                        tokens[currtoken] = malloc(3);
+                        strcpy(tokens[currtoken], "&");
+                    }
+                } else if (isspace(line[i])) {
+                    if (tokens[currtoken]) currtoken++;
+                } else {
+                    if (is_control[currtoken]) currtoken++;
+                    tokens[currtoken] = strcatchr(tokens[currtoken], line[i]);
+                }
+            }
+
+        }
+    }
+
+    *is_control_out = is_control;
+    return tokens;
+}
+
+void parse_command(char **tokens, bool *is_control) {
+    if (tokens[0] == '&') {
+        syntax_error("unexpected token starting with &");
+        return;
+    }
+    char **it;
+    char *cmd;
+    for (it=tokens; *it; ++it) {
+        char *token = *it;
+        if (is_control[it-tokens]) {
+        } else {
+        }
+    }
+}
+
+int main(int argc, char *argv[]) {
+    while (true) {
+        write(1, "> ", 2);
+        char *line = NULL;
+        size_t sz = 0;
+        size_t len = getline(&line, &sz, stdin);
+
+        bool *is_control;
+        char **tokens = gettokens(line, len-1, &is_control); // newline is not needed
+        if (!tokens) {
+            free(line);
+            continue;
+        }
+        parse_tokens(tokens);
+    }
+    return 0;
+}
