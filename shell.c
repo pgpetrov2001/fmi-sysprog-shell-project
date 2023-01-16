@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <string.h>
+#include <assert.h>
 
 //TODO: write getline
 
@@ -55,6 +56,7 @@ void syntax_error(const char *msg) {
 }
 
 char **gettokens(const char *line, size_t len, bool **is_control_out) {
+	is_control_out = NULL;
     int cnt = getcnttokens(line, len);
     //calloc fills values with 0s
     char **tokens = calloc(cnt + 1, sizeof(char*));
@@ -111,17 +113,93 @@ char **gettokens(const char *line, size_t len, bool **is_control_out) {
     return tokens;
 }
 
-void parse_command(char **tokens, bool *is_control) {
-    if (tokens[0] == '&') {
-        syntax_error("unexpected token starting with &");
+void signal_error(const char *msg) {
+	write(2, msg, strlen(msg));
+}
+
+void general_exec(char *cmd) {
+	if (execvp(cmd[0], cmd) == -1) {
+		write(2, "Command ", strlen("Command "));
+		write(2, cmd[0], strlen(cmd[0]));
+		write(2, " not found in path");
+	}
+}
+
+int execute_singleton_command(const char *cmd) {
+	int pid;
+	if (pid = fork()) {
+		int status;
+		waitpid(pid, &status);
+		return status;
+	} else {
+		general_exec(cmd);
+	}
+}
+
+void execute_singleton_command_async(const char *cmd) {
+	int pid;
+	if (pid = fork()) {
+		char msg[20];
+		sprintf(msg, "[%d]\n", pid);
+		write(1, msg, strlen(msg));
+	} else {
+		general_exec(cmd);
+	}
+}
+
+void execute_command(char **tokens, bool *is_control) {
+	int num_control = 0;
+	int num_tokens = 0;
+	{
+		char **it;
+		bool async_syntax_error;
+		for (it=tokens, num_tokens=0; *it; ++it, ++num_tokens) 
+		{
+			async_syntax_error = 0;
+			if (is_control[num_tokens]) {
+				if (num_tokens > 0 && is_control[num_tokens-1]) {
+					syntax_error("syntax error with 2 consecutive control tokens");
+					return;
+				}
+				if (strcmp(*it, "&") == 0) async_syntax_error = 1;
+				++num_control;
+			}
+		}
+		if (async_syntax_error) {
+			syntax_error("async operator & is only at end of input");
+			return;
+		}
+	}
+	if (num_tokens == 0) return;
+    if (is_control[0]) {
+        syntax_error("unexpected token at start");
         return;
     }
-    char **it;
-    char *cmd;
-    for (it=tokens; *it; ++it) {
+	if (is_control[num_tokens-1] && (strcmp(tokens[num_tokens-1], "&") == 0 || strcmp(tokens[num_tokens-1], ";") == 0)) {
+		syntax_error("unexpected token at end of input");
+		return;
+	}
+    char **cmd         = calloc((num_tokens+1) * sizeof(void*));
+	char **cmd_end = cmd;
+	//char ***pipe_chain = calloc(num_control * sizeof(void*));
+	char **it             = tokens;
+	char **cmd_it         = cmd;
+	//char ***pipe_chain_it = pipe_chain;
+    for (; *it; ++it) {
         char *token = *it;
         if (is_control[it-tokens]) {
+			if (strcmp(token, "&&") == 0) {
+				if (execute_singleton_command(cmd)) return;
+			} else if (strcmp(token, ";") == 0) {
+				execute_singleton_command(cmd);
+			} else if (strcmp(token, "&") == 0) {
+				execute_singleton_command_async(cmd);
+			} else {
+				assert(false);
+			}
+			cmd = cmd_end;
         } else {
+			*(cmd_end++) = token;
         }
     }
 }
@@ -139,7 +217,7 @@ int main(int argc, char *argv[]) {
             free(line);
             continue;
         }
-        parse_tokens(tokens);
+        execute_command(tokens);
     }
     return 0;
 }
